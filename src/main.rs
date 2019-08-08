@@ -18,6 +18,7 @@ extern crate gfx_backend_metal as back;
 extern crate gfx_backend_vulkan as back;
 extern crate gfx_hal as hal;
 
+use nalgebra_glm as glm;
 use hal::format::{AsFormat, ChannelType, Rgba8Srgb as ColorFormat, Swizzle};
 use hal::pass::Subpass;
 use hal::pso::{PipelineStage, ShaderStageFlags, VertexInputRate};
@@ -212,16 +213,16 @@ fn main() {
 
         // TODO: check transitions: read/write mapping and vertex buffer read
         unsafe {
+            let proj = glm::perspective(1.0, glm::half_pi::<f32>() * 0.8, 1.0 / 16.0, 1024.);
+            let lookat = glm::look_at(&glm::vec3(0.0, 0.0, -10.0), &glm::vec3(0.0, 0.0, -9.0), &glm::vec3(0.0, 1.0, 0.0));
+            let view_proj =  proj * lookat;
+
+            let uniform_mvp: [[f32; 4]; 4] = view_proj.into();
+
             let mut constants = device
-                .acquire_mapping_writer::<f32>(&buffer_memory, 0 .. buffer_req.size)
+                .acquire_mapping_writer::<[[f32; 4]; 4]>(&buffer_memory, 0 .. buffer_req.size)
                 .unwrap();
-                for i in 0..16 {
-                    constants[i] = 0.0;
-                }
-            constants[0] = 1.0;
-            constants[5] = 1.0;
-            constants[10] = 1.0;
-            constants[15] = 1.0;
+            constants[0] = uniform_mvp;
             
             device.release_mapping_writer(constants).unwrap();
         };
@@ -237,12 +238,6 @@ fn main() {
                 array_offset: 0,
                 descriptors: Some(pso::Descriptor::Buffer(&constants_buffer, None..None)),
             },
-            // pso::DescriptorSetWrite {
-            //     set: &desc_set,
-            //     binding: 1,
-            //     array_offset: 0,
-            //     descriptors: Some(pso::Descriptor::Sampler(&sampler)),
-            // },
         ]);
     }
 
@@ -658,7 +653,7 @@ fn main() {
                     &framebuffers[swap_image],
                     viewport.rect,
                     &[command::ClearValue::Color(command::ClearColor::Sfloat([
-                        0.8, 0.8, 0.8, 1.0,
+                        0.0, 0.0, 0.0, 0.0,
                     ]))],
                 );
                 encoder.draw(0 .. 6, 0 .. 1);
