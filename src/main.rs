@@ -239,167 +239,22 @@ fn main() {
         device.release_mapping_writer(vertices).unwrap();
     }
 
-    // Image
-    let img_data = include_bytes!("../data/logo.png");
-
-    let img = image::load(Cursor::new(&img_data[..]), image::PNG)
-        .unwrap()
-        .to_rgba();
-    let (width, height) = img.dimensions();
-    let kind = i::Kind::D2(width as i::Size, height as i::Size, 1, 1);
-    let row_alignment_mask = limits.optimal_buffer_copy_pitch_alignment as u32 - 1;
-    let image_stride = 4usize;
-    let row_pitch = (width * image_stride as u32 + row_alignment_mask) & !row_alignment_mask;
-    let upload_size = (height * row_pitch) as u64;
-
-    let mut image_upload_buffer =
-        unsafe { device.create_buffer(upload_size, buffer::Usage::TRANSFER_SRC) }.unwrap();
-    let image_mem_reqs = unsafe { device.get_buffer_requirements(&image_upload_buffer) };
-    let image_upload_memory =
-        unsafe { device.allocate_memory(upload_type, image_mem_reqs.size) }.unwrap();
-
-    unsafe { device.bind_buffer_memory(&image_upload_memory, 0, &mut image_upload_buffer) }
-        .unwrap();
-
-    // copy image data into staging buffer
-    unsafe {
-        let mut data = device
-            .acquire_mapping_writer::<u8>(&image_upload_memory, 0 .. image_mem_reqs.size)
-            .unwrap();
-        for y in 0 .. height as usize {
-            let row = &(*img)
-                [y * (width as usize) * image_stride .. (y + 1) * (width as usize) * image_stride];
-            let dest_base = y * row_pitch as usize;
-            data[dest_base .. dest_base + row.len()].copy_from_slice(row);
-        }
-        device.release_mapping_writer(data).unwrap();
-    }
-
-    let mut image_logo = unsafe {
-        device.create_image(
-            kind,
-            1,
-            ColorFormat::SELF,
-            i::Tiling::Optimal,
-            i::Usage::TRANSFER_DST | i::Usage::SAMPLED,
-            i::ViewCapabilities::empty(),
-        )
-    }
-    .unwrap();
-    let image_req = unsafe { device.get_image_requirements(&image_logo) };
-
-    let device_type = memory_types
-        .iter()
-        .enumerate()
-        .position(|(id, memory_type)| {
-            image_req.type_mask & (1 << id) != 0
-                && memory_type.properties.contains(m::Properties::DEVICE_LOCAL)
-        })
-        .unwrap()
-        .into();
-    let image_memory = unsafe { device.allocate_memory(device_type, image_req.size) }.unwrap();
-
-    unsafe { device.bind_image_memory(&image_memory, 0, &mut image_logo) }.unwrap();
-    let image_srv = unsafe {
-        device.create_image_view(
-            &image_logo,
-            i::ViewKind::D2,
-            ColorFormat::SELF,
-            Swizzle::NO,
-            COLOR_RANGE.clone(),
-        )
-    }
-    .unwrap();
-
-    let sampler = unsafe {
-        device.create_sampler(i::SamplerInfo::new(i::Filter::Linear, i::WrapMode::Clamp))
-    }
-    .expect("Can't create sampler");
-
-    unsafe {
-        device.write_descriptor_sets(vec![
-            pso::DescriptorSetWrite {
-                set: &desc_set,
-                binding: 0,
-                array_offset: 0,
-                descriptors: Some(pso::Descriptor::Image(&image_srv, i::Layout::ShaderReadOnlyOptimal)),
-            },
-            pso::DescriptorSetWrite {
-                set: &desc_set,
-                binding: 1,
-                array_offset: 0,
-                descriptors: Some(pso::Descriptor::Sampler(&sampler)),
-            },
-        ]);
-    }
-
-    // copy buffer to texture
-    let mut copy_fence = device.create_fence(false).expect("Could not create fence");
-    unsafe {
-        let mut cmd_buffer = command_pool.acquire_command_buffer::<command::OneShot>();
-        cmd_buffer.begin();
-
-        let image_barrier = m::Barrier::Image {
-            states: (i::Access::empty(), i::Layout::Undefined)
-                .. (i::Access::TRANSFER_WRITE, i::Layout::TransferDstOptimal),
-            target: &image_logo,
-            families: None,
-            range: COLOR_RANGE.clone(),
-        };
-
-        cmd_buffer.pipeline_barrier(
-            PipelineStage::TOP_OF_PIPE .. PipelineStage::TRANSFER,
-            m::Dependencies::empty(),
-            &[image_barrier],
-        );
-
-        cmd_buffer.copy_buffer_to_image(
-            &image_upload_buffer,
-            &image_logo,
-            i::Layout::TransferDstOptimal,
-            &[command::BufferImageCopy {
-                buffer_offset: 0,
-                buffer_width: row_pitch / (image_stride as u32),
-                buffer_height: height as u32,
-                image_layers: i::SubresourceLayers {
-                    aspects: f::Aspects::COLOR,
-                    level: 0,
-                    layers: 0 .. 1,
-                },
-                image_offset: i::Offset { x: 0, y: 0, z: 0 },
-                image_extent: i::Extent {
-                    width,
-                    height,
-                    depth: 1,
-                },
-            }],
-        );
-
-        let image_barrier = m::Barrier::Image {
-            states: (i::Access::TRANSFER_WRITE, i::Layout::TransferDstOptimal)
-                .. (i::Access::SHADER_READ, i::Layout::ShaderReadOnlyOptimal),
-            target: &image_logo,
-            families: None,
-            range: COLOR_RANGE.clone(),
-        };
-        cmd_buffer.pipeline_barrier(
-            PipelineStage::TRANSFER .. PipelineStage::FRAGMENT_SHADER,
-            m::Dependencies::empty(),
-            &[image_barrier],
-        );
-
-        cmd_buffer.finish();
-
-        queue_group.queues[0].submit_without_semaphores(Some(&cmd_buffer), Some(&mut copy_fence));
-
-        device
-            .wait_for_fence(&copy_fence, !0)
-            .expect("Can't wait for fence");
-    }
-
-    unsafe {
-        device.destroy_fence(copy_fence);
-    }
+    // unsafe {
+    //     device.write_descriptor_sets(vec![
+    //         pso::DescriptorSetWrite {
+    //             set: &desc_set,
+    //             binding: 0,
+    //             array_offset: 0,
+    //             descriptors: Some(pso::Descriptor::Image(&image_srv, i::Layout::ShaderReadOnlyOptimal)),
+    //         },
+    //         pso::DescriptorSetWrite {
+    //             set: &desc_set,
+    //             binding: 1,
+    //             array_offset: 0,
+    //             descriptors: Some(pso::Descriptor::Sampler(&sampler)),
+    //         },
+    //     ]);
+    // }
 
     let (caps, formats, _present_modes) = surface.compatibility(&mut adapter.physical_device);
     println!("formats: {:?}", formats);
@@ -857,10 +712,6 @@ fn main() {
         device.destroy_descriptor_set_layout(set_layout);
 
         device.destroy_buffer(vertex_buffer);
-        device.destroy_buffer(image_upload_buffer);
-        device.destroy_image(image_logo);
-        device.destroy_image_view(image_srv);
-        device.destroy_sampler(sampler);
         device.destroy_semaphore(free_acquire_semaphore);
         for p in cmd_pools {
             device.destroy_command_pool(p.into_raw());
@@ -876,8 +727,6 @@ fn main() {
         }
         device.destroy_render_pass(render_pass);
         device.free_memory(buffer_memory);
-        device.free_memory(image_memory);
-        device.free_memory(image_upload_memory);
         device.destroy_graphics_pipeline(pipeline);
         device.destroy_pipeline_layout(pipeline_layout);
         for framebuffer in framebuffers {

@@ -14,7 +14,6 @@ env_logger = "0.4"
 log = "0.3"
 gfx-backend-metal = { git = "https://github.com/gfx-rs/gfx", optional = true, features = ["winit"] }
 glsl-to-spirv = "0.1.7"
-image = "0.21"
 
 [features]
 default = []
