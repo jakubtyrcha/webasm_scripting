@@ -118,16 +118,9 @@ fn main() {
             &[
                 pso::DescriptorSetLayoutBinding {
                     binding: 0,
-                    ty: pso::DescriptorType::SampledImage,
+                    ty: pso::DescriptorType::UniformBuffer,
                     count: 1,
-                    stage_flags: ShaderStageFlags::FRAGMENT,
-                    immutable_samplers: false,
-                },
-                pso::DescriptorSetLayoutBinding {
-                    binding: 1,
-                    ty: pso::DescriptorType::Sampler,
-                    count: 1,
-                    stage_flags: ShaderStageFlags::FRAGMENT,
+                    stage_flags: ShaderStageFlags::VERTEX,
                     immutable_samplers: false,
                 },
             ],
@@ -142,11 +135,7 @@ fn main() {
             1, // sets
             &[
                 pso::DescriptorRangeDesc {
-                    ty: pso::DescriptorType::SampledImage,
-                    count: 1,
-                },
-                pso::DescriptorRangeDesc {
-                    ty: pso::DescriptorType::Sampler,
+                    ty: pso::DescriptorType::UniformBuffer,
                     count: 1,
                 },
             ],
@@ -166,9 +155,13 @@ fn main() {
     let mut vertex_buffer =
         unsafe { device.create_buffer(buffer_len, buffer::Usage::VERTEX) }.unwrap();
 
-    let buffer_req = unsafe { device.get_buffer_requirements(&vertex_buffer) };
+    let mut constants_buffer =
+        unsafe { device.create_buffer(64, buffer::Usage::UNIFORM) }.unwrap();
 
-    let upload_type = memory_types
+    let vbuffer_memory = {
+        let buffer_req = unsafe { device.get_buffer_requirements(&vertex_buffer) };
+
+        let upload_type = memory_types
         .iter()
         .enumerate()
         .position(|(id, mem_type)| {
@@ -181,35 +174,77 @@ fn main() {
         .unwrap()
         .into();
 
-    let buffer_memory = unsafe { device.allocate_memory(upload_type, buffer_req.size) }.unwrap();
+        let buffer_memory = unsafe { device.allocate_memory(upload_type, buffer_req.size) }.unwrap();
 
-    unsafe { device.bind_buffer_memory(&buffer_memory, 0, &mut vertex_buffer) }.unwrap();
+        unsafe { device.bind_buffer_memory(&buffer_memory, 0, &mut vertex_buffer) }.unwrap();
 
-    // TODO: check transitions: read/write mapping and vertex buffer read
+        // TODO: check transitions: read/write mapping and vertex buffer read
+        unsafe {
+            let mut vertices = device
+                .acquire_mapping_writer::<Vertex>(&buffer_memory, 0 .. buffer_req.size)
+                .unwrap();
+            vertices[0 .. QUAD.len()].copy_from_slice(&QUAD);
+            device.release_mapping_writer(vertices).unwrap();
+        };
+
+        buffer_memory
+    };
+
+    let cbuffer_memory = {
+        let buffer_req = unsafe { device.get_buffer_requirements(&constants_buffer) };
+
+        let upload_type = memory_types
+        .iter()
+        .enumerate()
+        .position(|(id, mem_type)| {
+            // type_mask is a bit field where each bit represents a memory type. If the bit is set
+            // to 1 it means we can use that type for our buffer. So this code finds the first
+            // memory type that has a `1` (or, is allowed), and is visible to the CPU.
+            buffer_req.type_mask & (1 << id) != 0
+                && mem_type.properties.contains(m::Properties::CPU_VISIBLE)
+        })
+        .unwrap()
+        .into();
+
+        let buffer_memory = unsafe { device.allocate_memory(upload_type, buffer_req.size) }.unwrap();
+
+        unsafe { device.bind_buffer_memory(&buffer_memory, 0, &mut constants_buffer) }.unwrap();
+
+        // TODO: check transitions: read/write mapping and vertex buffer read
+        unsafe {
+            let mut constants = device
+                .acquire_mapping_writer::<f32>(&buffer_memory, 0 .. buffer_req.size)
+                .unwrap();
+                for i in 0..16 {
+                    constants[i] = 0.0;
+                }
+            constants[0] = 1.0;
+            constants[5] = 1.0;
+            constants[10] = 1.0;
+            constants[15] = 1.0;
+            
+            device.release_mapping_writer(constants).unwrap();
+        };
+
+        buffer_memory
+    };
+
     unsafe {
-        let mut vertices = device
-            .acquire_mapping_writer::<Vertex>(&buffer_memory, 0 .. buffer_req.size)
-            .unwrap();
-        vertices[0 .. QUAD.len()].copy_from_slice(&QUAD);
-        device.release_mapping_writer(vertices).unwrap();
+        device.write_descriptor_sets(vec![
+            pso::DescriptorSetWrite {
+                set: &desc_set,
+                binding: 0,
+                array_offset: 0,
+                descriptors: Some(pso::Descriptor::Buffer(&constants_buffer, None..None)),
+            },
+            // pso::DescriptorSetWrite {
+            //     set: &desc_set,
+            //     binding: 1,
+            //     array_offset: 0,
+            //     descriptors: Some(pso::Descriptor::Sampler(&sampler)),
+            // },
+        ]);
     }
-
-    // unsafe {
-    //     device.write_descriptor_sets(vec![
-    //         pso::DescriptorSetWrite {
-    //             set: &desc_set,
-    //             binding: 0,
-    //             array_offset: 0,
-    //             descriptors: Some(pso::Descriptor::Image(&image_srv, i::Layout::ShaderReadOnlyOptimal)),
-    //         },
-    //         pso::DescriptorSetWrite {
-    //             set: &desc_set,
-    //             binding: 1,
-    //             array_offset: 0,
-    //             descriptors: Some(pso::Descriptor::Sampler(&sampler)),
-    //         },
-    //     ]);
-    // }
 
     let (caps, formats, _present_modes) = surface.compatibility(&mut adapter.physical_device);
     println!("formats: {:?}", formats);
@@ -675,7 +710,8 @@ fn main() {
             device.destroy_fence(f);
         }
         device.destroy_render_pass(render_pass);
-        device.free_memory(buffer_memory);
+        device.free_memory(vbuffer_memory);
+        device.free_memory(cbuffer_memory);
         device.destroy_graphics_pipeline(pipeline);
         device.destroy_pipeline_layout(pipeline_layout);
         for framebuffer in framebuffers {
