@@ -1,0 +1,21 @@
+[package]
+name = "client"
+version = "0.1.0"
+authors = ["jakubtyrcha <jakub.tyrcha@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+gfx = "0.18.1"
+gfx-hal = { git = "https://github.com/gfx-rs/gfx" }
+winit = "0.19"
+env_logger = "0.4"
+log = "0.3"
+gfx-backend-metal = { git = "https://github.com/gfx-rs/gfx", optional = true, features = ["winit"] }
+glsl-to-spirv = "0.1.7"
+image = "0.21"
+
+[features]
+default = []
+metal = ["gfx-backend-metal"]
