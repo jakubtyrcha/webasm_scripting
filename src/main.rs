@@ -3,9 +3,7 @@
         feature = "vulkan",
         feature = "dx11",
         feature = "dx12",
-        feature = "metal",
-        feature = "gl",
-        feature = "wgl"
+        feature = "metal"
     )),
     allow(dead_code, unused_extern_crates, unused_imports)
 )]
@@ -14,23 +12,11 @@
 extern crate gfx_backend_dx11 as back;
 #[cfg(feature = "dx12")]
 extern crate gfx_backend_dx12 as back;
-#[cfg(any(feature = "gl", feature = "wgl"))]
-extern crate gfx_backend_gl as back;
 #[cfg(feature = "metal")]
 extern crate gfx_backend_metal as back;
 #[cfg(feature = "vulkan")]
 extern crate gfx_backend_vulkan as back;
 extern crate gfx_hal as hal;
-
-#[cfg(target_arch = "wasm32")]
-use wasm_bindgen::prelude::*;
-
-#[cfg(target_arch = "wasm32")]
-#[wasm_bindgen(start)]
-pub fn wasm_main() {
-    std::panic::set_hook(Box::new(console_error_panic_hook::hook));
-    main();
-}
 
 use hal::format::{AsFormat, ChannelType, Rgba8Srgb as ColorFormat, Swizzle};
 use hal::pass::Subpass;
@@ -86,20 +72,12 @@ const COLOR_RANGE: i::SubresourceRange = i::SubresourceRange {
     feature = "vulkan",
     feature = "dx11",
     feature = "dx12",
-    feature = "metal",
-    feature = "gl",
-    feature = "wgl"
+    feature = "metal"
 ))]
 fn main() {
-    #[cfg(target_arch = "wasm32")]
-    console_log::init_with_level(log::Level::Debug).unwrap();
-    #[cfg(not(target_arch = "wasm32"))]
     env_logger::init();
 
-    #[cfg(not(target_arch = "wasm32"))]
     let mut events_loop = winit::EventsLoop::new();
-
-    #[cfg(not(target_arch = "wasm32"))]
     let wb = winit::WindowBuilder::new()
         .with_min_dimensions(winit::dpi::LogicalSize::new(1.0, 1.0))
         .with_dimensions(winit::dpi::LogicalSize::new(
@@ -108,35 +86,12 @@ fn main() {
         ))
         .with_title("quad".to_string());
     // instantiate backend
-    #[cfg(not(feature = "gl"))]
     let (_window, _instance, mut adapters, mut surface) = {
         let window = wb.build(&events_loop).unwrap();
         let instance = back::Instance::create("gfx-rs quad", 1);
         let surface = instance.create_surface(&window);
         let adapters = instance.enumerate_adapters();
         (window, instance, adapters, surface)
-    };
-    #[cfg(feature = "gl")]
-    let (window, mut adapters, mut surface) = {
-        #[cfg(not(target_arch = "wasm32"))]
-        let (window, surface) = {
-            let builder =
-                back::config_context(back::glutin::ContextBuilder::new(), ColorFormat::SELF, None)
-                    .with_vsync(true);
-            let windowed_context = builder.build_windowed(wb, &events_loop).unwrap();
-            let (context, window) = unsafe { windowed_context.make_current().expect("Unable to make context current").split() };
-            let surface = back::Surface::from_context(context);
-            (window, surface)
-        };
-        #[cfg(target_arch = "wasm32")]
-        let (window, surface) = {
-            let window = back::Window;
-            let surface = back::Surface::from_window(&window);
-            (window, surface)
-        };
-
-        let adapters = surface.enumerate_adapters();
-        (window, adapters, surface)
     };
 
     for adapter in &adapters {
@@ -524,8 +479,7 @@ fn main() {
     };
     let mut frame: u64 = 0;
     while running {
-        running = !cfg!(target_arch = "wasm32");
-        #[cfg(not(target_arch = "wasm32"))]
+        running = true;
         events_loop.poll_events(|event| {
             if let winit::Event::WindowEvent { event, .. } = event {
                 #[allow(unused_variables)]
@@ -541,11 +495,6 @@ fn main() {
                     | winit::WindowEvent::CloseRequested => running = false,
                     winit::WindowEvent::Resized(dims) => {
                         println!("resized to {:?}", dims);
-                        #[cfg(feature = "gl")]
-                        {
-                            let context = surface.get_context();
-                            context.resize(dims.to_physical(window.get_hidpi_factor()));
-                        }
                         recreate_swapchain = true;
                         resize_dims.width = dims.width as u32;
                         resize_dims.height = dims.height as u32;
@@ -744,10 +693,8 @@ fn main() {
     feature = "vulkan",
     feature = "dx11",
     feature = "dx12",
-    feature = "metal",
-    feature = "gl",
-    feature = "wgl"
+    feature = "metal"
 )))]
 fn main() {
-    println!("You need to enable the native API feature (vulkan/metal/dx11/dx12/gl/wgl) in order to test the LL");
+    println!("You need to enable the native API feature (vulkan/metal/dx11/dx12) in order to test the LL");
 }
