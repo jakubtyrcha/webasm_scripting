@@ -152,39 +152,47 @@ fn main() {
 
     // Define maximum number of frames we want to be able to be "in flight" (being computed
     // simultaneously) at once
-    const frames_in_flight : usize = 3;
+    const FRAMES_IN_FLIGHT : usize = 3;
+
+    type Buffer = <back::Backend as hal::Backend>::Buffer;
+    type Memory = <back::Backend as hal::Backend>::Memory;
 
     struct Frame
     {
-        desc_set : Option<<back::Backend as hal::Backend>::DescriptorSet>
+        desc_set : Option<<back::Backend as hal::Backend>::DescriptorSet>,
+        ubuffer : Option<Buffer>,
+        ubuffer_mem : Option<Memory>
     }
 
     impl Frame
     {
         fn new() -> Frame 
         {
-            Frame { desc_set : None }
+            Frame { desc_set : None, ubuffer : None, ubuffer_mem : None }
         }
     }
 
-    let frames : [Frame; frames_in_flight] = [Frame::new(), Frame::new(), Frame::new(), ];
+    let mut frames : [Frame; FRAMES_IN_FLIGHT] = [Frame::new(), Frame::new(), Frame::new(), ];
 
     // Descriptors
     let mut desc_pool = unsafe {
         device.create_descriptor_pool(
-            frames_in_flight, // sets
+            FRAMES_IN_FLIGHT, // sets
             &[
                 pso::DescriptorRangeDesc {
                     ty: pso::DescriptorType::UniformBuffer,
-                    count: 1,
+                    count: FRAMES_IN_FLIGHT,
                 },
             ],
             pso::DescriptorPoolCreateFlags::empty(),
         )
     }
     .expect("Can't create descriptor pool");
-    
-    let desc_set : <back::Backend as hal::Backend>::DescriptorSet = unsafe { desc_pool.allocate_set(&set_layout) }.unwrap();
+
+    for i in 0..FRAMES_IN_FLIGHT {
+        frames[i].desc_set = Some(unsafe { desc_pool.allocate_set(&set_layout) }.unwrap());
+        println!("allocated {}", i);
+    }
 
     // Buffer allocations
     println!("Memory types: {:?}", memory_types);
@@ -196,8 +204,54 @@ fn main() {
     let mut vertex_buffer =
         unsafe { device.create_buffer(buffer_len, buffer::Usage::VERTEX) }.unwrap();
 
-    let mut constants_buffer =
-        unsafe { device.create_buffer(64, buffer::Usage::UNIFORM) }.unwrap();
+    for i in 0..FRAMES_IN_FLIGHT {
+        frames[i].ubuffer = Some(unsafe { device.create_buffer(64, buffer::Usage::UNIFORM) }.unwrap());
+    }
+
+    fn allocate_ubuffer_mem(device : & <back::Backend as hal::Backend>::Device, heaps : &hal::adapter::MemoryProperties, mut buffer : &mut Buffer) -> Memory
+    {
+        let buffer_req = unsafe { device.get_buffer_requirements(buffer) };
+
+        let upload_type = heaps.memory_types
+        .iter()
+        .enumerate()
+        .position(|(id, mem_type)| {
+            // type_mask is a bit field where each bit represents a memory type. If the bit is set
+            // to 1 it means we can use that type for our buffer. So this code finds the first
+            // memory type that has a `1` (or, is allowed), and is visible to the CPU.
+            buffer_req.type_mask & (1 << id) != 0
+                && mem_type.properties.contains(m::Properties::CPU_VISIBLE)
+        })
+        .unwrap()
+        .into();
+
+        let buffer_memory = unsafe { device.allocate_memory(upload_type, buffer_req.size) }.unwrap();
+
+        unsafe { device.bind_buffer_memory(&buffer_memory, 0, &mut buffer) }.unwrap();
+
+        buffer_memory
+    }
+
+    for i in 0..1 {
+        let mem = allocate_ubuffer_mem(&device, &adapter.physical_device.memory_properties(), frames[i].ubuffer.as_mut().unwrap());
+        frames[i].ubuffer_mem = Some(mem);
+
+        let proj = glm::perspective(1.0, glm::half_pi::<f32>() * 0.8, 1.0 / 16.0, 1024.);
+        let lookat = glm::look_at(&glm::vec3(0.0, 0.0, -10.0), &glm::vec3(0.0, 0.0, -9.0), &glm::vec3(0.0, 1.0, 0.0));
+        let view_proj =  proj * lookat;
+
+        let uniform_mvp: [[f32; 4]; 4] = view_proj.into();
+
+        unsafe {
+            let mut constants = device
+                .acquire_mapping_writer::<[[f32; 4]; 4]>(frames[i].ubuffer_mem.as_ref().unwrap(), 0 .. 64)
+                .unwrap();
+
+            constants[0] = uniform_mvp;
+                
+            device.release_mapping_writer(constants).unwrap();
+        }
+    }
 
     let vbuffer_memory = {
         let buffer_req = unsafe { device.get_buffer_requirements(&vertex_buffer) };
@@ -231,52 +285,13 @@ fn main() {
         buffer_memory
     };
 
-    let cbuffer_memory = {
-        let buffer_req = unsafe { device.get_buffer_requirements(&constants_buffer) };
-
-        let upload_type = memory_types
-        .iter()
-        .enumerate()
-        .position(|(id, mem_type)| {
-            // type_mask is a bit field where each bit represents a memory type. If the bit is set
-            // to 1 it means we can use that type for our buffer. So this code finds the first
-            // memory type that has a `1` (or, is allowed), and is visible to the CPU.
-            buffer_req.type_mask & (1 << id) != 0
-                && mem_type.properties.contains(m::Properties::CPU_VISIBLE)
-        })
-        .unwrap()
-        .into();
-
-        let buffer_memory = unsafe { device.allocate_memory(upload_type, buffer_req.size) }.unwrap();
-
-        unsafe { device.bind_buffer_memory(&buffer_memory, 0, &mut constants_buffer) }.unwrap();
-
-        // TODO: check transitions: read/write mapping and vertex buffer read
-        unsafe {
-            let proj = glm::perspective(1.0, glm::half_pi::<f32>() * 0.8, 1.0 / 16.0, 1024.);
-            let lookat = glm::look_at(&glm::vec3(0.0, 0.0, -10.0), &glm::vec3(0.0, 0.0, -9.0), &glm::vec3(0.0, 1.0, 0.0));
-            let view_proj =  proj * lookat;
-
-            let uniform_mvp: [[f32; 4]; 4] = view_proj.into();
-
-            let mut constants = device
-                .acquire_mapping_writer::<[[f32; 4]; 4]>(&buffer_memory, 0 .. buffer_req.size)
-                .unwrap();
-            constants[0] = uniform_mvp;
-            
-            device.release_mapping_writer(constants).unwrap();
-        };
-
-        buffer_memory
-    };
-
     unsafe {
         device.write_descriptor_sets(vec![
             pso::DescriptorSetWrite {
-                set: &desc_set,
+                set: frames[0].desc_set.as_ref().unwrap(),
                 binding: 0,
                 array_offset: 0,
-                descriptors: Some(pso::Descriptor::Buffer(&constants_buffer, None..None)),
+                descriptors: Some(pso::Descriptor::Buffer(frames[0].ubuffer.as_ref().unwrap(), None..None)),
             },
         ]);
     }
@@ -367,8 +382,8 @@ fn main() {
         .expect("Could not create semaphore");
 
     // The number of the rest of the resources is based on the frames in flight.
-    let mut submission_complete_semaphores = Vec::with_capacity(frames_in_flight);
-    let mut submission_complete_fences = Vec::with_capacity(frames_in_flight);
+    let mut submission_complete_semaphores = Vec::with_capacity(FRAMES_IN_FLIGHT);
+    let mut submission_complete_fences = Vec::with_capacity(FRAMES_IN_FLIGHT);
     // Note: We don't really need a different command pool per frame in such a simple demo like this,
     // but in a more 'real' application, it's generally seen as optimal to have one command pool per
     // thread per frame. There is a flag that lets a command pool reset individual command buffers
@@ -378,11 +393,11 @@ fn main() {
     // usually best to just make a command pool for each set of buffers which need to be reset at the
     // same time (each frame). In our case, each pool will only have one command buffer created from it,
     // though.
-    let mut cmd_pools = Vec::with_capacity(frames_in_flight);
-    let mut cmd_buffers = Vec::with_capacity(frames_in_flight);
+    let mut cmd_pools = Vec::with_capacity(FRAMES_IN_FLIGHT);
+    let mut cmd_buffers = Vec::with_capacity(FRAMES_IN_FLIGHT);
 
     cmd_pools.push(command_pool);
-    for _ in 1 .. frames_in_flight {
+    for _ in 1 .. FRAMES_IN_FLIGHT {
         unsafe {
             cmd_pools.push(
                 device
@@ -400,7 +415,7 @@ fn main() {
         );
     }
 
-    for i in 0 .. frames_in_flight {
+    for i in 0 .. FRAMES_IN_FLIGHT {
         submission_complete_semaphores.push(
             device
                 .create_semaphore()
@@ -655,10 +670,10 @@ fn main() {
         // Compute index into our resource ring buffers based on the frame number
         // and number of frames in flight. Pay close attention to where this index is needed
         // versus when the swapchain image index we got from acquire_image is needed.
-        let frame_idx = frame as usize % frames_in_flight;
+        let frame_idx = frame as usize % FRAMES_IN_FLIGHT;
 
         // Wait for the fence of the previous submission of this frame and reset it; ensures we are
-        // submitting only up to maximum number of frames_in_flight if we are submitting faster than
+        // submitting only up to maximum number of FRAMES_IN_FLIGHT if we are submitting faster than
         // the gpu can keep up with. This would also guarantee that any resources which need to be
         // updated with a CPU->GPU data copy are not in use by the GPU, so we can perform those updates.
         // In this case there are none to be done, however.
@@ -681,7 +696,7 @@ fn main() {
             cmd_buffer.set_scissors(0, &[viewport.rect]);
             cmd_buffer.bind_graphics_pipeline(&pipeline);
             cmd_buffer.bind_vertex_buffers(0, Some((&vertex_buffer, 0)));
-            cmd_buffer.bind_graphics_descriptor_sets(&pipeline_layout, 0, Some(&desc_set), &[]);
+            cmd_buffer.bind_graphics_descriptor_sets(&pipeline_layout, 0, frames[frame_idx].desc_set.as_ref(), &[]);
 
             {
                 let mut encoder = cmd_buffer.begin_render_pass_inline(
@@ -742,7 +757,7 @@ fn main() {
         }
         device.destroy_render_pass(render_pass);
         device.free_memory(vbuffer_memory);
-        device.free_memory(cbuffer_memory);
+        //device.free_memory(cbuffer_memory);
         device.destroy_graphics_pipeline(pipeline);
         device.destroy_pipeline_layout(pipeline_layout);
         for framebuffer in framebuffers {
