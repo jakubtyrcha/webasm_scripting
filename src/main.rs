@@ -45,6 +45,26 @@ const DIMS: Extent2D = Extent2D { width: 1024,height: 768 };
 
 const ENTRY_NAME: &str = "main";
 
+struct WorldState
+{
+    camera_position : glm::Vec3,
+    camera_lookat : glm::Vec3,
+    camera_up : glm::Vec3,
+}
+
+impl WorldState
+{
+    fn set_camera(&mut self, position : &[f32; 3])
+    {
+        self.camera_position = glm::Vec3::from_row_slice(position);
+    }
+
+    fn add_particle(&mut self, position : &[f32; 3])
+    {
+
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 #[allow(non_snake_case)]
 struct Vertex {
@@ -130,10 +150,29 @@ fn main() {
     }
     .expect("Can't create descriptor set layout");
 
+    // Define maximum number of frames we want to be able to be "in flight" (being computed
+    // simultaneously) at once
+    const frames_in_flight : usize = 3;
+
+    struct Frame
+    {
+        desc_set : Option<<back::Backend as hal::Backend>::DescriptorSet>
+    }
+
+    impl Frame
+    {
+        fn new() -> Frame 
+        {
+            Frame { desc_set : None }
+        }
+    }
+
+    let frames : [Frame; frames_in_flight] = [Frame::new(), Frame::new(), Frame::new(), ];
+
     // Descriptors
     let mut desc_pool = unsafe {
         device.create_descriptor_pool(
-            1, // sets
+            frames_in_flight, // sets
             &[
                 pso::DescriptorRangeDesc {
                     ty: pso::DescriptorType::UniformBuffer,
@@ -144,7 +183,8 @@ fn main() {
         )
     }
     .expect("Can't create descriptor pool");
-    let desc_set = unsafe { desc_pool.allocate_set(&set_layout) }.unwrap();
+    
+    let desc_set : <back::Backend as hal::Backend>::DescriptorSet = unsafe { desc_pool.allocate_set(&set_layout) }.unwrap();
 
     // Buffer allocations
     println!("Memory types: {:?}", memory_types);
@@ -316,11 +356,7 @@ fn main() {
             })
             .collect::<Vec<_>>();
         (pairs, fbos)
-    };
-
-    // Define maximum number of frames we want to be able to be "in flight" (being computed
-    // simultaneously) at once
-    let frames_in_flight = 3;
+    }; 
 
     // Number of image acquisition semaphores is based on the number of swapchain images, not frames in flight,
     // plus one extra which we can guarantee is unused at any given time by swapping it out with the ones
