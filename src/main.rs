@@ -39,6 +39,7 @@ use hal::{Device, Instance, PhysicalDevice, Surface, Swapchain};
 
 use std::io::Cursor;
 use std::fs;
+use std::time::{Duration, Instant};
 
 #[cfg_attr(rustfmt, rustfmt_skip)]
 const DIMS: Extent2D = Extent2D { width: 1024,height: 768 };
@@ -232,25 +233,9 @@ fn main() {
         buffer_memory
     }
 
-    for i in 0..1 {
+    for i in 0..FRAMES_IN_FLIGHT {
         let mem = allocate_ubuffer_mem(&device, &adapter.physical_device.memory_properties(), frames[i].ubuffer.as_mut().unwrap());
         frames[i].ubuffer_mem = Some(mem);
-
-        let proj = glm::perspective(1.0, glm::half_pi::<f32>() * 0.8, 1.0 / 16.0, 1024.);
-        let lookat = glm::look_at(&glm::vec3(0.0, 0.0, -10.0), &glm::vec3(0.0, 0.0, -9.0), &glm::vec3(0.0, 1.0, 0.0));
-        let view_proj =  proj * lookat;
-
-        let uniform_mvp: [[f32; 4]; 4] = view_proj.into();
-
-        unsafe {
-            let mut constants = device
-                .acquire_mapping_writer::<[[f32; 4]; 4]>(frames[i].ubuffer_mem.as_ref().unwrap(), 0 .. 64)
-                .unwrap();
-
-            constants[0] = uniform_mvp;
-                
-            device.release_mapping_writer(constants).unwrap();
-        }
     }
 
     let vbuffer_memory = {
@@ -285,15 +270,17 @@ fn main() {
         buffer_memory
     };
 
-    unsafe {
-        device.write_descriptor_sets(vec![
-            pso::DescriptorSetWrite {
-                set: frames[0].desc_set.as_ref().unwrap(),
-                binding: 0,
-                array_offset: 0,
-                descriptors: Some(pso::Descriptor::Buffer(frames[0].ubuffer.as_ref().unwrap(), None..None)),
-            },
-        ]);
+    for i in 0..FRAMES_IN_FLIGHT {
+        unsafe {
+            device.write_descriptor_sets(vec![
+                pso::DescriptorSetWrite {
+                    set: frames[i].desc_set.as_ref().unwrap(),
+                    binding: 0,
+                    array_offset: 0,
+                    descriptors: Some(pso::Descriptor::Buffer(frames[i].ubuffer.as_ref().unwrap(), None..None)),
+                },
+            ]);
+        }
     }
 
     let (caps, formats, _present_modes) = surface.compatibility(&mut adapter.physical_device);
@@ -558,6 +545,7 @@ fn main() {
         width: 0,
         height: 0,
     };
+    let now = Instant::now();
     let mut frame: u64 = 0;
     while running {
         running = true;
@@ -671,6 +659,25 @@ fn main() {
         // and number of frames in flight. Pay close attention to where this index is needed
         // versus when the swapchain image index we got from acquire_image is needed.
         let frame_idx = frame as usize % FRAMES_IN_FLIGHT;
+
+        let elapsed_sec = now.elapsed().as_micros() as f32 / 1000000.;
+        let t = elapsed_sec;
+
+        let proj = glm::perspective(1.0, glm::half_pi::<f32>() * 0.8, 1.0 / 16.0, 1024.);
+        let lookat = glm::look_at(&glm::vec3(t.sin() * 10.0, 0.0, t.cos() * 10.0), &glm::vec3(0.0, 0.0, 0.0), &glm::vec3(0.0, 1.0, 0.0));
+        let view_proj =  proj * lookat;
+
+        let uniform_mvp: [[f32; 4]; 4] = view_proj.into();
+
+        unsafe {
+            let mut constants = device
+                .acquire_mapping_writer::<[[f32; 4]; 4]>(frames[frame_idx].ubuffer_mem.as_ref().unwrap(), 0 .. 64)
+                .unwrap();
+
+            constants[0] = uniform_mvp;
+                
+            device.release_mapping_writer(constants).unwrap();
+        }
 
         // Wait for the fence of the previous submission of this frame and reset it; ensures we are
         // submitting only up to maximum number of FRAMES_IN_FLIGHT if we are submitting faster than
