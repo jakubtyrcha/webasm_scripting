@@ -41,6 +41,14 @@ use std::io::Cursor;
 use std::fs;
 use std::time::{Duration, Instant};
 
+mod error;
+
+mod upload;
+use upload::{UploadBuffer};
+
+mod frame;
+use frame::{Frame};
+
 #[cfg_attr(rustfmt, rustfmt_skip)]
 const DIMS: Extent2D = Extent2D { width: 1024,height: 768 };
 
@@ -66,73 +74,6 @@ impl WorldState
 struct Vertex {
     a_Pos: [f32; 4],
     a_Uv: [f32; 2],
-}
-
-type BackendDevice = <back::Backend as hal::Backend>::Device;
-type BackendBuffer = <back::Backend as hal::Backend>::Buffer;
-type BackendMemory = <back::Backend as hal::Backend>::Memory;
-
-enum BackendError
-{
-    AllocationError(hal::device::AllocationError),
-    BufferCreationError(hal::buffer::CreationError),
-    BindError(hal::device::BindError)
-}
-
-impl From<hal::device::AllocationError> for BackendError
-{
-    fn from(error: hal::device::AllocationError) -> Self {
-        BackendError::AllocationError(error)
-    }
-}
-
-impl From<hal::buffer::CreationError> for BackendError
-{
-    fn from(error: hal::buffer::CreationError) -> Self {
-        BackendError::BufferCreationError(error)
-    }
-}
-
-impl From<hal::device::BindError> for BackendError
-{
-    fn from(error: hal::device::BindError) -> Self {
-        BackendError::BindError(error)
-    }
-}
-
-struct UploadBuffer
-{
-    size : u64,
-    device_buffer : BackendBuffer,
-    device_memory : BackendMemory
-}
-
-impl UploadBuffer
-{
-    fn new(device : &BackendDevice, adapter_mem : &hal::adapter::MemoryProperties, size : u64, usage : hal::buffer::Usage) -> Result<UploadBuffer, BackendError> {
-        let mut buffer = unsafe { device.create_buffer(size, usage) }?;
-
-        let buffer_req = unsafe { device.get_buffer_requirements(&buffer) };
-
-        let upload_type = adapter_mem.memory_types
-            .iter()
-            .enumerate()
-            .position(|(id, mem_type)| {
-                // type_mask is a bit field where each bit represents a memory type. If the bit is set
-                // to 1 it means we can use that type for our buffer. So this code finds the first
-                // memory type that has a `1` (or, is allowed), and is visible to the CPU.
-                buffer_req.type_mask & (1 << id) != 0
-                    && mem_type.properties.contains(m::Properties::CPU_VISIBLE)
-            })
-            .unwrap()
-            .into();
-
-        let buffer_memory = unsafe { device.allocate_memory(upload_type, buffer_req.size) }?;
-
-        unsafe { device.bind_buffer_memory(&buffer_memory, 0, &mut buffer) }?;
-
-        Ok(UploadBuffer { size : size, device_buffer : buffer, device_memory : buffer_memory })
-    }
 }
 
 #[cfg_attr(rustfmt, rustfmt_skip)]
@@ -216,20 +157,6 @@ fn main() {
     // Define maximum number of frames we want to be able to be "in flight" (being computed
     // simultaneously) at once
     const FRAMES_IN_FLIGHT : usize = 3;
-
-    struct Frame
-    {
-        desc_set : Option<<back::Backend as hal::Backend>::DescriptorSet>,
-        ubuffer : Option<UploadBuffer>
-    }
-
-    impl Frame
-    {
-        fn new() -> Frame 
-        {
-            Frame { desc_set : None, ubuffer : None }
-        }
-    }
 
     let mut frames : [Frame; FRAMES_IN_FLIGHT] = [Frame::new(), Frame::new(), Frame::new(), ];
 
