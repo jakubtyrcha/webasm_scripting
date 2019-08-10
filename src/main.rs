@@ -19,6 +19,7 @@ extern crate gfx_backend_vulkan as back;
 extern crate gfx_hal as hal;
 
 use nalgebra_glm as glm;
+use glm::{Vec3, vec3};
 use hal::format::{AsFormat, ChannelType, Rgba8Srgb as ColorFormat, Swizzle};
 use hal::pass::Subpass;
 use hal::pso::{PipelineStage, ShaderStageFlags, VertexInputRate};
@@ -41,14 +42,19 @@ use std::io::Cursor;
 use std::fs;
 use std::time::{Duration, Instant};
 
-mod error;
-use error::{BackendDevice};
+mod backenderror;
+use backenderror::{BackendDevice};
 
 mod upload;
 use upload::{UploadBuffer};
 
 mod frame;
 use frame::{Frame};
+
+mod world;
+use world::{WorldState};
+
+mod vm;
 
 #[cfg_attr(rustfmt, rustfmt_skip)]
 const DIMS: Extent2D = Extent2D { width: 1024,height: 768 };
@@ -326,16 +332,6 @@ fn main() {
     }
     .expect("Can't create pipeline layout");
     let pipeline = {
-        // let vs_module = {
-        //     let spirv =
-        //         hal::read_spirv(Cursor::new(&include_bytes!("data/quad.vert.spv")[..])).unwrap();
-        //     unsafe { device.create_shader_module(&spirv) }.unwrap()
-        // };
-        // let fs_module = {
-        //     let spirv =
-        //         hal::read_spirv(Cursor::new(&include_bytes!("./data/quad.frag.spv")[..])).unwrap();
-        //     unsafe { device.create_shader_module(&spirv) }.unwrap()
-        // };
 
         let vs_module = {
             let glsl = fs::read_to_string("data/quad.vert").unwrap();
@@ -439,6 +435,9 @@ fn main() {
         },
         depth: 0.0 .. 1.0,
     };
+
+    //
+    let mut world = WorldState::new(vec3(0.0, 0.0, -10.0), vec3(0.0, 0.0, 0.0), vec3(0., 1., 0.));
 
     //
     let mut running = true;
@@ -565,9 +564,11 @@ fn main() {
         let elapsed_sec = now.elapsed().as_micros() as f32 / 1000000.;
         let t = elapsed_sec;
 
-        fn update_world_state(device : &BackendDevice, frame : &mut Frame, time : f32) {
+        world.tick(t);
+
+        fn update_current_frame(device : &BackendDevice, frame : &mut Frame, time : f32, world : &WorldState) {
             let proj = glm::perspective(1.0, glm::half_pi::<f32>() * 0.8, 1.0 / 16.0, 1024.);
-            let lookat = glm::look_at(&glm::vec3(time.sin() * 10.0, 0.0, time.cos() * 10.0), &glm::vec3(0.0, 0.0, 0.0), &glm::vec3(0.0, 1.0, 0.0));
+            let lookat = glm::look_at(&world.camera_position, &world.camera_lookat, &world.camera_up);
             let view_proj =  proj * lookat;
 
             let uniform_mvp: [[f32; 4]; 4] = view_proj.into();
@@ -583,6 +584,7 @@ fn main() {
             }
 
             let mut vertices_list = Vec::<Vertex>::new();
+            vertices_list.reserve_exact(world.particles_list.len() * 6);
 
             fn add_particle(vec : &mut Vec::<Vertex>, world_position : glm::Vec3, size : f32, camera_position : glm::Vec3, up : glm::Vec3) {
                 let n = camera_position - world_position;
@@ -605,7 +607,9 @@ fn main() {
                 vec.push(Vertex { a_Pos: [ v3.x, v3.y, v3.z , 1.0 ], a_Uv: [0.0, 0.0] });
             }
 
-            add_particle(&mut vertices_list, glm::vec3(0., 0., 0.), 1., glm::vec3(0., 0., -10.), glm::vec3(0., 1., 0.));
+            for p in &world.particles_list {
+                add_particle(&mut vertices_list, p.position, p.size, world.camera_position, world.camera_up);
+            }
 
             unsafe {
                 let stride = std::mem::size_of::<Vertex>() as u64;
@@ -621,7 +625,7 @@ fn main() {
             }
         }
 
-        update_world_state(&device, &mut frames[frame_idx], t);
+        update_current_frame(&device, &mut frames[frame_idx], t, &world);
 
         // Wait for the fence of the previous submission of this frame and reset it; ensures we are
         // submitting only up to maximum number of FRAMES_IN_FLIGHT if we are submitting faster than

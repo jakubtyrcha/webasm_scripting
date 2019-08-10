@@ -3,7 +3,7 @@ use hal::{
     memory as m
 };
 use hal::{Device};
-use crate::error::{BackendError, BackendMemory, BackendBuffer, BackendDevice};
+use crate::backenderror::{BackendError, BackendMemory, BackendBuffer, BackendDevice};
 
 pub struct UploadBuffer
 {
