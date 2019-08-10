@@ -220,15 +220,14 @@ fn main() {
     struct Frame
     {
         desc_set : Option<<back::Backend as hal::Backend>::DescriptorSet>,
-        ubuffer : Option<BackendBuffer>,
-        ubuffer_mem : Option<BackendMemory>
+        ubuffer : Option<UploadBuffer>
     }
 
     impl Frame
     {
         fn new() -> Frame 
         {
-            Frame { desc_set : None, ubuffer : None, ubuffer_mem : None }
+            Frame { desc_set : None, ubuffer : None }
         }
     }
 
@@ -293,36 +292,8 @@ fn main() {
         unsafe { device.create_buffer(buffer_len, buffer::Usage::VERTEX) }.unwrap();
 
     for i in 0..FRAMES_IN_FLIGHT {
-        frames[i].ubuffer = Some(unsafe { device.create_buffer(64, buffer::Usage::UNIFORM) }.unwrap());
-    }
-
-    fn allocate_ubuffer_mem(device : & BackendDevice, heaps : &hal::adapter::MemoryProperties, mut buffer : &mut BackendBuffer) -> BackendMemory
-    {
-        let buffer_req = unsafe { device.get_buffer_requirements(buffer) };
-
-        let upload_type = heaps.memory_types
-        .iter()
-        .enumerate()
-        .position(|(id, mem_type)| {
-            // type_mask is a bit field where each bit represents a memory type. If the bit is set
-            // to 1 it means we can use that type for our buffer. So this code finds the first
-            // memory type that has a `1` (or, is allowed), and is visible to the CPU.
-            buffer_req.type_mask & (1 << id) != 0
-                && mem_type.properties.contains(m::Properties::CPU_VISIBLE)
-        })
-        .unwrap()
-        .into();
-
-        let buffer_memory = unsafe { device.allocate_memory(upload_type, buffer_req.size) }.unwrap();
-
-        unsafe { device.bind_buffer_memory(&buffer_memory, 0, &mut buffer) }.unwrap();
-
-        buffer_memory
-    }
-
-    for i in 0..FRAMES_IN_FLIGHT {
-        let mem = allocate_ubuffer_mem(&device, &adapter.physical_device.memory_properties(), frames[i].ubuffer.as_mut().unwrap());
-        frames[i].ubuffer_mem = Some(mem);
+        let buffer_creation = UploadBuffer::new(&device, &adapter.physical_device.memory_properties(), 64, buffer::Usage::UNIFORM);
+        frames[i].ubuffer = buffer_creation.ok();
     }
 
     let vbuffer_memory = {
@@ -364,7 +335,7 @@ fn main() {
                     set: frames[i].desc_set.as_ref().unwrap(),
                     binding: 0,
                     array_offset: 0,
-                    descriptors: Some(pso::Descriptor::Buffer(frames[i].ubuffer.as_ref().unwrap(), None..None)),
+                    descriptors: Some(pso::Descriptor::Buffer(&frames[i].ubuffer.as_ref().unwrap().device_buffer, None..None)),
                 },
             ]);
         }
@@ -758,7 +729,7 @@ fn main() {
 
         unsafe {
             let mut constants = device
-                .acquire_mapping_writer::<[[f32; 4]; 4]>(frames[frame_idx].ubuffer_mem.as_ref().unwrap(), 0 .. 64)
+                .acquire_mapping_writer::<[[f32; 4]; 4]>(&frames[frame_idx].ubuffer.as_ref().unwrap().device_memory, 0 .. 64)
                 .unwrap();
 
             constants[0] = uniform_mvp;
