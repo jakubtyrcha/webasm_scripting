@@ -192,14 +192,42 @@ fn main() {
 
     for i in 0..FRAMES_IN_FLIGHT {
         frames[i].desc_set = Some(unsafe { desc_pool.allocate_set(&set_layout) }.unwrap());
-        println!("allocated {}", i);
     }
 
     // Buffer allocations
     println!("Memory types: {:?}", memory_types);
 
+    const MAX_VERTICES : usize = 6 * 1024 * 1024;
+
+    let mut vertices_list = Vec::<Vertex>::new();
+
     let buffer_stride = std::mem::size_of::<Vertex>() as u64;
-    let buffer_len = QUAD.len() as u64 * buffer_stride;
+    let buffer_len = MAX_VERTICES as u64 * buffer_stride;
+
+    fn add_particle(vec : &mut Vec::<Vertex>, world_position : glm::Vec3, size : f32, camera_position : glm::Vec3, up : glm::Vec3) {
+        let n = camera_position - world_position;
+        let n = glm::normalize(&n);
+
+        let r = n.cross(&up);
+        let u = r.cross(&n);
+
+        let v0 = world_position - r * size + u * size;
+        let v1 = world_position + r * size + u * size;
+        let v2 = world_position + r * size - u * size;
+        let v3 = world_position - r * size - u * size;
+
+        vec.push(Vertex { a_Pos: [ v0.x, v0.y, v0.z , 1.0 ], a_Uv: [0.0, 1.0] });
+        vec.push(Vertex { a_Pos: [ v1.x, v1.y, v1.z , 1.0 ], a_Uv: [1.0, 1.0] });
+        vec.push(Vertex { a_Pos: [ v2.x, v2.y, v2.z , 1.0 ], a_Uv: [1.0, 0.0] });
+
+        vec.push(Vertex { a_Pos: [ v0.x, v0.y, v0.z , 1.0 ], a_Uv: [0.0, 1.0] });
+        vec.push(Vertex { a_Pos: [ v2.x, v2.y, v2.z , 1.0 ], a_Uv: [1.0, 0.0] });
+        vec.push(Vertex { a_Pos: [ v3.x, v3.y, v3.z , 1.0 ], a_Uv: [0.0, 0.0] });
+    }
+
+    add_particle(&mut vertices_list, glm::vec3(0., 0., 0.), 1., glm::vec3(0., 0., -10.), glm::vec3(0., 1., 0.));
+
+    println!("{:?}", vertices_list);
 
     assert_ne!(buffer_len, 0);
     let mut vertex_buffer =
