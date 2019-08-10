@@ -42,6 +42,7 @@ use std::fs;
 use std::time::{Duration, Instant};
 
 mod error;
+use error::{BackendDevice};
 
 mod upload;
 use upload::{UploadBuffer};
@@ -75,17 +76,6 @@ struct Vertex {
     a_Pos: [f32; 4],
     a_Uv: [f32; 2],
 }
-
-#[cfg_attr(rustfmt, rustfmt_skip)]
-const QUAD: [Vertex; 6] = [
-    Vertex { a_Pos: [ -0.5, 0.33, 0.0, 1.0 ], a_Uv: [0.0, 1.0] },
-    Vertex { a_Pos: [  0.5, 0.33, 0.0, 1.0 ], a_Uv: [1.0, 1.0] },
-    Vertex { a_Pos: [  0.5,-0.33, 0.0, 1.0 ], a_Uv: [1.0, 0.0] },
-
-    Vertex { a_Pos: [ -0.5, 0.33, 0.0, 1.0 ], a_Uv: [0.0, 1.0] },
-    Vertex { a_Pos: [  0.5,-0.33, 0.0, 1.0 ], a_Uv: [1.0, 0.0] },
-    Vertex { a_Pos: [ -0.5,-0.33, 0.0, 1.0 ], a_Uv: [0.0, 0.0] },
-];
 
 const COLOR_RANGE: i::SubresourceRange = i::SubresourceRange {
     aspects: f::Aspects::COLOR,
@@ -184,76 +174,18 @@ fn main() {
 
     const MAX_VERTICES : usize = 6 * 1024 * 1024;
 
-    let mut vertices_list = Vec::<Vertex>::new();
+    let vbuffer_stride = std::mem::size_of::<Vertex>() as u64;
+    let vbuffer_len = MAX_VERTICES as u64 * vbuffer_stride;
 
-    let buffer_stride = std::mem::size_of::<Vertex>() as u64;
-    let buffer_len = MAX_VERTICES as u64 * buffer_stride;
-
-    fn add_particle(vec : &mut Vec::<Vertex>, world_position : glm::Vec3, size : f32, camera_position : glm::Vec3, up : glm::Vec3) {
-        let n = camera_position - world_position;
-        let n = glm::normalize(&n);
-
-        let r = n.cross(&up);
-        let u = r.cross(&n);
-
-        let v0 = world_position - r * size + u * size;
-        let v1 = world_position + r * size + u * size;
-        let v2 = world_position + r * size - u * size;
-        let v3 = world_position - r * size - u * size;
-
-        vec.push(Vertex { a_Pos: [ v0.x, v0.y, v0.z , 1.0 ], a_Uv: [0.0, 1.0] });
-        vec.push(Vertex { a_Pos: [ v1.x, v1.y, v1.z , 1.0 ], a_Uv: [1.0, 1.0] });
-        vec.push(Vertex { a_Pos: [ v2.x, v2.y, v2.z , 1.0 ], a_Uv: [1.0, 0.0] });
-
-        vec.push(Vertex { a_Pos: [ v0.x, v0.y, v0.z , 1.0 ], a_Uv: [0.0, 1.0] });
-        vec.push(Vertex { a_Pos: [ v2.x, v2.y, v2.z , 1.0 ], a_Uv: [1.0, 0.0] });
-        vec.push(Vertex { a_Pos: [ v3.x, v3.y, v3.z , 1.0 ], a_Uv: [0.0, 0.0] });
-    }
-
-    add_particle(&mut vertices_list, glm::vec3(0., 0., 0.), 1., glm::vec3(0., 0., -10.), glm::vec3(0., 1., 0.));
-
-    println!("{:?}", vertices_list);
-
-    assert_ne!(buffer_len, 0);
-    let mut vertex_buffer =
-        unsafe { device.create_buffer(buffer_len, buffer::Usage::VERTEX) }.unwrap();
+    assert_ne!(vbuffer_len, 0);
 
     for i in 0..FRAMES_IN_FLIGHT {
-        let buffer_creation = UploadBuffer::new(&device, &adapter.physical_device.memory_properties(), 64, buffer::Usage::UNIFORM);
-        frames[i].ubuffer = buffer_creation.ok();
+        let vbuffer = UploadBuffer::new(&device, &adapter.physical_device.memory_properties(), vbuffer_len, buffer::Usage::VERTEX);
+        frames[i].vbuffer = vbuffer.ok();
+
+        let ubuffer = UploadBuffer::new(&device, &adapter.physical_device.memory_properties(), 64, buffer::Usage::UNIFORM);
+        frames[i].ubuffer = ubuffer.ok();
     }
-
-    let vbuffer_memory = {
-        let buffer_req = unsafe { device.get_buffer_requirements(&vertex_buffer) };
-
-        let upload_type = memory_types
-        .iter()
-        .enumerate()
-        .position(|(id, mem_type)| {
-            // type_mask is a bit field where each bit represents a memory type. If the bit is set
-            // to 1 it means we can use that type for our buffer. So this code finds the first
-            // memory type that has a `1` (or, is allowed), and is visible to the CPU.
-            buffer_req.type_mask & (1 << id) != 0
-                && mem_type.properties.contains(m::Properties::CPU_VISIBLE)
-        })
-        .unwrap()
-        .into();
-
-        let buffer_memory = unsafe { device.allocate_memory(upload_type, buffer_req.size) }.unwrap();
-
-        unsafe { device.bind_buffer_memory(&buffer_memory, 0, &mut vertex_buffer) }.unwrap();
-
-        // TODO: check transitions: read/write mapping and vertex buffer read
-        unsafe {
-            let mut vertices = device
-                .acquire_mapping_writer::<Vertex>(&buffer_memory, 0 .. buffer_req.size)
-                .unwrap();
-            vertices[0 .. QUAD.len()].copy_from_slice(&QUAD);
-            device.release_mapping_writer(vertices).unwrap();
-        };
-
-        buffer_memory
-    };
 
     for i in 0..FRAMES_IN_FLIGHT {
         unsafe {
@@ -648,21 +580,63 @@ fn main() {
         let elapsed_sec = now.elapsed().as_micros() as f32 / 1000000.;
         let t = elapsed_sec;
 
-        let proj = glm::perspective(1.0, glm::half_pi::<f32>() * 0.8, 1.0 / 16.0, 1024.);
-        let lookat = glm::look_at(&glm::vec3(t.sin() * 10.0, 0.0, t.cos() * 10.0), &glm::vec3(0.0, 0.0, 0.0), &glm::vec3(0.0, 1.0, 0.0));
-        let view_proj =  proj * lookat;
+        fn update_world_state(device : &BackendDevice, frame : &mut Frame, time : f32) {
+            let proj = glm::perspective(1.0, glm::half_pi::<f32>() * 0.8, 1.0 / 16.0, 1024.);
+            let lookat = glm::look_at(&glm::vec3(time.sin() * 10.0, 0.0, time.cos() * 10.0), &glm::vec3(0.0, 0.0, 0.0), &glm::vec3(0.0, 1.0, 0.0));
+            let view_proj =  proj * lookat;
 
-        let uniform_mvp: [[f32; 4]; 4] = view_proj.into();
+            let uniform_mvp: [[f32; 4]; 4] = view_proj.into();
 
-        unsafe {
-            let mut constants = device
-                .acquire_mapping_writer::<[[f32; 4]; 4]>(&frames[frame_idx].ubuffer.as_ref().unwrap().device_memory, 0 .. 64)
-                .unwrap();
+            unsafe {
+                let mut constants = device
+                    .acquire_mapping_writer::<[[f32; 4]; 4]>(&frame.ubuffer.as_ref().unwrap().device_memory, 0 .. 64)
+                    .unwrap();
 
-            constants[0] = uniform_mvp;
-                
-            device.release_mapping_writer(constants).unwrap();
+                constants[0] = uniform_mvp;
+                    
+                device.release_mapping_writer(constants).unwrap();
+            }
+
+            let mut vertices_list = Vec::<Vertex>::new();
+
+            fn add_particle(vec : &mut Vec::<Vertex>, world_position : glm::Vec3, size : f32, camera_position : glm::Vec3, up : glm::Vec3) {
+                let n = camera_position - world_position;
+                let n = glm::normalize(&n);
+
+                let r = n.cross(&up);
+                let u = r.cross(&n);
+
+                let v0 = world_position - r * size + u * size;
+                let v1 = world_position + r * size + u * size;
+                let v2 = world_position + r * size - u * size;
+                let v3 = world_position - r * size - u * size;
+
+                vec.push(Vertex { a_Pos: [ v0.x, v0.y, v0.z , 1.0 ], a_Uv: [0.0, 1.0] });
+                vec.push(Vertex { a_Pos: [ v1.x, v1.y, v1.z , 1.0 ], a_Uv: [1.0, 1.0] });
+                vec.push(Vertex { a_Pos: [ v2.x, v2.y, v2.z , 1.0 ], a_Uv: [1.0, 0.0] });
+
+                vec.push(Vertex { a_Pos: [ v0.x, v0.y, v0.z , 1.0 ], a_Uv: [0.0, 1.0] });
+                vec.push(Vertex { a_Pos: [ v2.x, v2.y, v2.z , 1.0 ], a_Uv: [1.0, 0.0] });
+                vec.push(Vertex { a_Pos: [ v3.x, v3.y, v3.z , 1.0 ], a_Uv: [0.0, 0.0] });
+            }
+
+            add_particle(&mut vertices_list, glm::vec3(0., 0., 0.), 1., glm::vec3(0., 0., -10.), glm::vec3(0., 1., 0.));
+
+            unsafe {
+                let stride = std::mem::size_of::<Vertex>() as u64;
+                let mut vertices = device
+                    .acquire_mapping_writer::<Vertex>(&frame.vbuffer.as_ref().unwrap().device_memory, 0 .. stride * vertices_list.len() as u64) // todo: wrong bounds, whatevs
+                    .unwrap();
+
+                for (i, v) in vertices_list.iter().enumerate() {
+                    vertices[i] = *v;
+                }
+                    
+                device.release_mapping_writer(vertices).unwrap();
+            }
         }
+
+        update_world_state(&device, &mut frames[frame_idx], t);
 
         // Wait for the fence of the previous submission of this frame and reset it; ensures we are
         // submitting only up to maximum number of FRAMES_IN_FLIGHT if we are submitting faster than
@@ -687,7 +661,7 @@ fn main() {
             cmd_buffer.set_viewports(0, &[viewport.clone()]);
             cmd_buffer.set_scissors(0, &[viewport.rect]);
             cmd_buffer.bind_graphics_pipeline(&pipeline);
-            cmd_buffer.bind_vertex_buffers(0, Some((&vertex_buffer, 0)));
+            cmd_buffer.bind_vertex_buffers(0, Some((&frames[frame_idx].vbuffer.as_ref().unwrap().device_buffer, 0)));
             cmd_buffer.bind_graphics_descriptor_sets(&pipeline_layout, 0, frames[frame_idx].desc_set.as_ref(), &[]);
 
             {
@@ -733,7 +707,7 @@ fn main() {
         device.destroy_descriptor_pool(desc_pool);
         device.destroy_descriptor_set_layout(set_layout);
 
-        device.destroy_buffer(vertex_buffer);
+        //device.destroy_buffer(vertex_buffer);
         device.destroy_semaphore(free_acquire_semaphore);
         for p in cmd_pools {
             device.destroy_command_pool(p.into_raw());
@@ -748,7 +722,7 @@ fn main() {
             device.destroy_fence(f);
         }
         device.destroy_render_pass(render_pass);
-        device.free_memory(vbuffer_memory);
+        //device.free_memory(vbuffer_memory);
         //device.free_memory(cbuffer_memory);
         device.destroy_graphics_pipeline(pipeline);
         device.destroy_pipeline_layout(pipeline_layout);
