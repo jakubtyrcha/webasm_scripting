@@ -55,21 +55,6 @@ const DIMS: Extent2D = Extent2D { width: 1024,height: 768 };
 
 const ENTRY_NAME: &str = "main";
 
-struct WorldState
-{
-    camera_position : glm::Vec3,
-    camera_lookat : glm::Vec3,
-    camera_up : glm::Vec3,
-}
-
-impl WorldState
-{
-    fn set_camera(&mut self, position : &[f32; 3])
-    {
-        self.camera_position = glm::Vec3::from_row_slice(position);
-    }
-}
-
 #[derive(Debug, Clone, Copy)]
 #[allow(non_snake_case)]
 struct Vertex {
