@@ -466,6 +466,14 @@ fn main() {
                         ..
                     }
                     | winit::WindowEvent::CloseRequested => running = false,
+                    winit::WindowEvent::KeyboardInput {
+                        input:
+                            winit::KeyboardInput {
+                                virtual_keycode: Some(winit::VirtualKeyCode::Space),
+                                ..
+                            },
+                        ..
+                    } => { vm_instance.load_script(); () },
                     winit::WindowEvent::Resized(dims) => {
                         println!("resized to {:?}", dims);
                         recreate_swapchain = true;
