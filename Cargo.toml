@@ -8,11 +8,11 @@ edition = "2018"
 
 [dependencies]
 gfx = "0.18.1"
-gfx-hal = { git = "https://github.com/gfx-rs/gfx" }
+gfx-hal = { git = "https://github.com/gfx-rs/gfx", branch = "hal-0.3" }
 winit = "0.19"
 env_logger = "0.4"
 log = "0.3"
-gfx-backend-metal = { git = "https://github.com/gfx-rs/gfx", optional = true, features = ["winit"] }
+gfx-backend-metal = { git = "https://github.com/gfx-rs/gfx", optional = true, features = ["winit"], branch = "hal-0.3" }
 glsl-to-spirv = "0.1.7"
 nalgebra-glm = "0.3"
 wasmer-runtime = "0.6.0"

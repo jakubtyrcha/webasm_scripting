@@ -55,6 +55,14 @@ fn add_particle(ctx: &mut Ctx, x0 : f32, y0: f32, z0: f32, size : f32) {
     world.add_particle(Particle{ position : vec3(x0, y0, z0), size : size });
 }
 
+fn sinf(ctx: &mut Ctx, x : f32) -> f32 {
+    x.sin()
+}
+
+fn cosf(ctx: &mut Ctx, x : f32) -> f32 {
+    x.cos()
+}
+
 pub fn run_script(world : &mut WorldState, t : f32) -> Result<(), VMError> {
     let source_file = "data/test.wasm";
     let bytecode = fs::read(source_file)?;
@@ -68,6 +76,8 @@ pub fn run_script(world : &mut WorldState, t : f32) -> Result<(), VMError> {
             // name        // the func! macro autodetects the signature
             "set_camera" => func!(set_camera),
             "add_particle" => func!(add_particle),
+            "cosf" => func!(cosf),
+            "sinf" => func!(sinf),
         },
     };
 
