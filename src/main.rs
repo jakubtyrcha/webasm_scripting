@@ -569,8 +569,8 @@ fn main() {
 
         world.tick(&mut vm_instance, t);
 
-        fn update_current_frame(device : &BackendDevice, frame : &mut Frame, time : f32, world : &WorldState) {
-            let proj = glm::perspective(1.0, glm::half_pi::<f32>() * 0.8, 1.0 / 16.0, 1024.);
+        fn update_current_frame(device : &BackendDevice, frame : &mut Frame, time : f32, world : &WorldState, aspect_ratio : f32) {
+            let proj = glm::perspective(aspect_ratio, glm::half_pi::<f32>() * 0.8, 1.0 / 16.0, 1024.);
             let lookat = glm::look_at(&world.camera_position, &world.camera_lookat, &world.camera_up);
             let view_proj =  proj * lookat;
 
@@ -628,7 +628,7 @@ fn main() {
             }
         }
 
-        update_current_frame(&device, &mut frames[frame_idx], t, &world);
+        update_current_frame(&device, &mut frames[frame_idx], t, &world, extent.width as f32 / extent.height as f32);
 
         // Wait for the fence of the previous submission of this frame and reset it; ensures we are
         // submitting only up to maximum number of FRAMES_IN_FLIGHT if we are submitting faster than
