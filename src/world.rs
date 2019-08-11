@@ -1,6 +1,8 @@
 use nalgebra_glm as glm;
 use glm::{Vec3, vec3};
 
+use crate::vm::run_script;
+
 pub struct Particle
 {
     pub position : Vec3,
@@ -38,6 +40,9 @@ impl WorldState
         self.camera_position = vec3(time.sin() * 10.0, 0.0, time.cos() * 10.0);
         self.camera_lookat = vec3(0.0, 0.0, 0.0);
 
-        self.add_particle(Particle{ position : vec3(0., 0., 0.), size : 1. });
+        let result = run_script(self, time);
+        if result.is_err() {
+            println!("{:?}", result);
+        }
     }
 }
