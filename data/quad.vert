@@ -16,4 +16,5 @@ out gl_PerVertex {
 void main() {
     v_uv = a_uv;
     gl_Position = mvpmat * a_pos;
+    gl_Position.y *= -1;
 }

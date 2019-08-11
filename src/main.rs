@@ -665,7 +665,7 @@ fn main() {
                         0.0, 0.0, 0.0, 0.0,
                     ]))],
                 );
-                encoder.draw(0 .. 6, 0 .. 1);
+                encoder.draw(0 .. world.particles_list.len() as u32 * 6, 0 .. 1);
             }
 
             cmd_buffer.finish();
