@@ -55,6 +55,7 @@ mod world;
 use world::{WorldState};
 
 mod vm;
+use vm::VMInstance;
 
 #[cfg_attr(rustfmt, rustfmt_skip)]
 const DIMS: Extent2D = Extent2D { width: 1024,height: 768 };
@@ -438,6 +439,8 @@ fn main() {
 
     //
     let mut world = WorldState::new(vec3(0.0, 0.0, -10.0), vec3(0.0, 0.0, 0.0), vec3(0., 1., 0.));
+    let mut vm_instance = VMInstance::new();
+    vm_instance.load_script();
 
     //
     let mut running = true;
@@ -564,7 +567,7 @@ fn main() {
         let elapsed_sec = now.elapsed().as_micros() as f32 / 1000000.;
         let t = elapsed_sec;
 
-        world.tick(t);
+        world.tick(&mut vm_instance, t);
 
         fn update_current_frame(device : &BackendDevice, frame : &mut Frame, time : f32, world : &WorldState) {
             let proj = glm::perspective(1.0, glm::half_pi::<f32>() * 0.8, 1.0 / 16.0, 1024.);

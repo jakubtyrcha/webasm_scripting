@@ -63,28 +63,45 @@ fn cosf(ctx: &mut Ctx, x : f32) -> f32 {
     x.cos()
 }
 
-pub fn run_script(world : &mut WorldState, t : f32) -> Result<(), VMError> {
-    let source_file = "data/test.wasm";
-    let bytecode = fs::read(source_file)?;
-    
-    let _set_camera = |x,y,z,x1,y1,z1| world.set_camera(vec3(x,y,z), vec3(x1, y1, z1));
-    
-    let import_object = imports! {
-        // Define the "env" namespace that was implicitly used
-        // by our sample application.
-        "env" => {
-            // name        // the func! macro autodetects the signature
-            "set_camera" => func!(set_camera),
-            "add_particle" => func!(add_particle),
-            "cosf" => func!(cosf),
-            "sinf" => func!(sinf),
-        },
-    };
+pub struct VMInstance {
+    instance : Option<wasmer_runtime::Instance>
+}
 
-    let mut instance = instantiate(&bytecode, &import_object)?;
-    instance.context_mut().data = world as *mut _ as *mut c_void;
+impl VMInstance {
+    pub fn new() -> VMInstance {
+        VMInstance { instance : None }
+    }
 
-    instance.call("tick", &[Value::F32(t)])?;
-    
-    Ok(())
+    pub fn load_script(&mut self) -> Result<(), VMError> {
+        let source_file = "data/test.wasm";
+        let bytecode = fs::read(source_file)?;
+        
+        let import_object = imports! {
+            // Define the "env" namespace that was implicitly used
+            // by our sample application.
+            "env" => {
+                // name        // the func! macro autodetects the signature
+                "set_camera" => func!(set_camera),
+                "add_particle" => func!(add_particle),
+                "cosf" => func!(cosf),
+                "sinf" => func!(sinf),
+            },
+        };
+
+        let mut instance = instantiate(&bytecode, &import_object)?;
+
+        self.instance = Some(instance);
+
+        Ok(())
+    }
+
+    pub fn call_tick(&mut self, world : &mut WorldState, t : f32) -> Result<(), VMError> {
+        let mut instance = self.instance.as_mut().unwrap();
+
+        instance.context_mut().data = world as *mut _ as *mut c_void;
+
+        instance.call("tick", &[Value::F32(t)])?;
+        
+        Ok(())
+    }
 }

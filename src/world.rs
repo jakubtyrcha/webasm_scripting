@@ -1,7 +1,6 @@
 use nalgebra_glm as glm;
 use glm::{Vec3, vec3};
-
-use crate::vm::run_script;
+use crate::vm::VMInstance;
 
 pub struct Particle
 {
@@ -14,7 +13,7 @@ pub struct WorldState
     pub camera_position : Vec3,
     pub camera_lookat : Vec3,
     pub camera_up : Vec3,
-    pub particles_list : Vec<Particle>
+    pub particles_list : Vec<Particle>,
 }
 
 impl WorldState
@@ -34,13 +33,10 @@ impl WorldState
         self.particles_list.push(particle);
     }
 
-    pub fn tick(&mut self, time : f32) {
+    pub fn tick(&mut self, vm : &mut VMInstance, time : f32) {
         self.particles_list.clear();
 
-        self.camera_position = vec3(time.sin() * 10.0, 0.0, time.cos() * 10.0);
-        self.camera_lookat = vec3(0.0, 0.0, 0.0);
-
-        let result = run_script(self, time);
+        let result = vm.call_tick(self, time);
         if result.is_err() {
             println!("{:?}", result);
         }
