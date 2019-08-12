@@ -34,7 +34,7 @@ struct color_rgba
   color_rgba(u8 _r, u8 _g, u8 _b, u8 _a) : r(_r), g(_g), b(_b), a(_a) {}
   
   u32 as_u32() const {
-    return (a << 24) | (g << 16) | (b << 8) | a;
+    return (a << 24) | (b << 16) | (g << 8) | r;
   }
 };
 
@@ -59,7 +59,8 @@ struct particle {
   color_rgba color;
 };
 
-particle g_particles[1024];
+constexpr int MAX_PARTICLES = 131072;
+particle g_particles[MAX_PARTICLES];
 
 float rand_uniform(float a, float b) {
   return a + (b-a)*((rand() % 8097) / 8096.);
@@ -81,7 +82,7 @@ void tick(float t)
   
   float camera_rotation_radius = 20.f;
   //set_camera(sin(t) * camera_rotation_radius, 0, cos(t) * camera_rotation_radius, 0, 0, 0);
-  set_camera(0, 10, -10, 0, 0, 0);
+  set_camera(0, 0, -10, 0, 0, 0);
   
   for(int i=0; i< g_particles_num; i++) {
     g_particles[i].lifetime += dt;
@@ -99,24 +100,23 @@ void tick(float t)
     }
   }
   
-  vec3 emiter_pos { rand_uniform(-1.f, 1.f), 0, rand_uniform(-1.f, 1.f) };
+  vec3 emiter_pos { 0, 0, 0 };
   last_emission += dt;
   const float emission_rate = 0.01f;
   while(last_emission > emission_rate) {
     last_emission -= emission_rate;
     
-    if(g_particles_num < 1024) {
+    if(g_particles_num < MAX_PARTICLES) {
       particle & p = g_particles[g_particles_num];
       g_particles_num++;
       
       p.pos = emiter_pos;
-      p.velocity = vec3(rand_0_1(), rand_0_1(), rand_0_1()) * 0.1f;
+      p.velocity = vec3(rand_uniform(-0.2, 0.2), rand_uniform(1., 2.), 0) * 0.1f;
       p.size = 0.1f;
       p.lifetime = 0;
-      u8 red = rand() % 256;
-      u8 green = rand() % 256;
-      u8 blue = rand() % 256;
-      p.color = { red, green, blue, 255 };
+      u8 red = (rand() % 32) + 255 - 33;
+      u8 green = (rand() % 128) + 255 - 129;
+      p.color = { red, green, 0, 255 };
       
       add_particle(p.pos.x, p.pos.y, p.pos.z, p.size, p.color.as_u32());
     }
