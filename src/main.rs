@@ -67,6 +67,7 @@ const ENTRY_NAME: &str = "main";
 struct Vertex {
     a_Pos: [f32; 4],
     a_Uv: [f32; 2],
+    a_Color: u32,
 }
 
 const COLOR_RANGE: i::SubresourceRange = i::SubresourceRange {
@@ -409,7 +410,15 @@ fn main() {
                 binding: 0,
                 element: pso::Element {
                     format: f::Format::Rg32Sfloat,
-                    offset: 8,
+                    offset: 16,
+                },
+            });
+            pipeline_desc.attributes.push(pso::AttributeDesc {
+                location: 2,
+                binding: 0,
+                element: pso::Element {
+                    format: f::Format::Rgba8Unorm,
+                    offset: 24,
                 },
             });
 
@@ -609,13 +618,13 @@ fn main() {
                 let v2 = world_position + r * size - u * size;
                 let v3 = world_position - r * size - u * size;
 
-                vec.push(Vertex { a_Pos: [ v0.x, v0.y, v0.z , 1.0 ], a_Uv: [0.0, 1.0] });
-                vec.push(Vertex { a_Pos: [ v1.x, v1.y, v1.z , 1.0 ], a_Uv: [1.0, 1.0] });
-                vec.push(Vertex { a_Pos: [ v2.x, v2.y, v2.z , 1.0 ], a_Uv: [1.0, 0.0] });
+                vec.push(Vertex { a_Pos: [ v0.x, v0.y, v0.z , 1.0 ], a_Uv: [0.0, 1.0], a_Color: 0xFFFFFFFF });
+                vec.push(Vertex { a_Pos: [ v1.x, v1.y, v1.z , 1.0 ], a_Uv: [1.0, 1.0], a_Color: 0xFFFFFFFF });
+                vec.push(Vertex { a_Pos: [ v2.x, v2.y, v2.z , 1.0 ], a_Uv: [1.0, 0.0], a_Color: 0xFFFFFFFF });
 
-                vec.push(Vertex { a_Pos: [ v0.x, v0.y, v0.z , 1.0 ], a_Uv: [0.0, 1.0] });
-                vec.push(Vertex { a_Pos: [ v2.x, v2.y, v2.z , 1.0 ], a_Uv: [1.0, 0.0] });
-                vec.push(Vertex { a_Pos: [ v3.x, v3.y, v3.z , 1.0 ], a_Uv: [0.0, 0.0] });
+                vec.push(Vertex { a_Pos: [ v0.x, v0.y, v0.z , 1.0 ], a_Uv: [0.0, 1.0], a_Color: 0xFFFFFFFF });
+                vec.push(Vertex { a_Pos: [ v2.x, v2.y, v2.z , 1.0 ], a_Uv: [1.0, 0.0], a_Color: 0xFFFFFFFF });
+                vec.push(Vertex { a_Pos: [ v3.x, v3.y, v3.z , 1.0 ], a_Uv: [0.0, 0.0], a_Color: 0xFFFFFFFF });
             }
 
             for p in &world.particles_list {
