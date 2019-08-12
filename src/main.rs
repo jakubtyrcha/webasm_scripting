@@ -636,7 +636,7 @@ fn main() {
             }
         }
 
-        update_current_frame(&device, &mut frames[frame_idx], t, &world, extent.width as f32 / extent.height as f32);
+        update_current_frame(&device, &mut frames[frame_idx], t, &world, viewport.rect.w as f32 / viewport.rect.h as f32);
 
         // Wait for the fence of the previous submission of this frame and reset it; ensures we are
         // submitting only up to maximum number of FRAMES_IN_FLIGHT if we are submitting faster than
