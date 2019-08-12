@@ -1,4 +1,5 @@
 #include <math.h>
+#include <stdlib.h>
 
 struct vec3 {
   float x;
@@ -53,16 +54,13 @@ void tick(float t)
   for(int i=0; i< g_particles_num; i++) {
     g_particles[i].lifetime += dt;
     if(g_particles[i].lifetime > 10.f) {
-      g_particles[i].pos = g_particles[g_particles_num - 1].pos;
-      g_particles[i].lifetime = g_particles[g_particles_num - 1].lifetime;
-      g_particles[i].velocity = g_particles[g_particles_num - 1].velocity;
-      g_particles[i].size = g_particles[g_particles_num - 1].size;
+      g_particles[i] = g_particles[g_particles_num - 1];
       g_particles_num--;
       i--;
     }
     else {
       g_particles[i].pos = g_particles[i].pos + g_particles[i].velocity;
-      //g_particles[i].velocity.y += -0.5;
+      g_particles[i].velocity.y += -0.001;
       
       add_particle(g_particles[i].pos.x, g_particles[i].pos.y, g_particles[i].pos.z, g_particles[i].size);
     }
@@ -78,7 +76,7 @@ void tick(float t)
       g_particles_num++;
       
       p.pos = emiter_pos;
-      p.velocity = vec3(sin(t), 1.f, cos(t)) * 0.1f;
+      p.velocity = vec3(sin(t), (rand() % 101) / 101.f, cos(t)) * 0.1f;
       p.size = 0.1f;
       p.lifetime = 0;
       

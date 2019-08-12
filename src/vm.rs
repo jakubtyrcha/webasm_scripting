@@ -16,6 +16,8 @@ use glm::{Vec3, vec3};
 use crate::WorldState;
 use crate::world::Particle;
 
+use rand::Rng;
+
 #[derive(Debug)]
 pub enum VMError
 {
@@ -63,6 +65,22 @@ fn cosf(ctx: &mut Ctx, x : f32) -> f32 {
     x.cos()
 }
 
+fn memcpy(ctx: &mut Ctx, dst : i32, src : i32, len : i32) -> i32 {
+    let memory = ctx.memory(0);
+    
+    for i in 0..len {
+        let c : u8 = memory.view()[(src + i) as usize].get();
+        memory.view()[(dst + i) as usize].set(c);
+    }
+
+    dst
+}
+
+fn rand(ctx: &mut Ctx) -> i32 {
+    let mut rng = rand::thread_rng();
+    rng.gen()
+}
+
 pub struct VMInstance {
     instance : Option<wasmer_runtime::Instance>
 }
@@ -85,6 +103,8 @@ impl VMInstance {
                 "add_particle" => func!(add_particle),
                 "cosf" => func!(cosf),
                 "sinf" => func!(sinf),
+                "memcpy" => func!(memcpy),
+                "rand" => func!(rand),
             },
         };
 
