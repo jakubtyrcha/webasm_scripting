@@ -13,6 +13,7 @@ winit = "0.19"
 env_logger = "0.4"
 log = "0.3"
 gfx-backend-metal = { git = "https://github.com/gfx-rs/gfx", optional = true, features = ["winit"], branch = "hal-0.3" }
+gfx-backend-dx12 = { git = "https://github.com/gfx-rs/gfx", optional = true, features = ["winit"], branch = "hal-0.3" }
 glsl-to-spirv = "0.1.7"
 nalgebra-glm = "0.3"
 wasmer-runtime = "0.6.0"
@@ -20,3 +21,4 @@ wasmer-runtime = "0.6.0"
 [features]
 default = []
 metal = ["gfx-backend-metal"]
+dx12 = ["gfx-backend-dx12"]
