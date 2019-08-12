@@ -606,7 +606,7 @@ fn main() {
             let mut vertices_list = Vec::<Vertex>::new();
             vertices_list.reserve_exact(world.particles_list.len() * 6);
 
-            fn add_particle(vec : &mut Vec::<Vertex>, world_position : glm::Vec3, size : f32, camera_position : glm::Vec3, up : glm::Vec3) {
+            fn add_particle(vec : &mut Vec::<Vertex>, world_position : glm::Vec3, size : f32, color : u32, camera_position : glm::Vec3, up : glm::Vec3) {
                 let n = camera_position - world_position;
                 let n = glm::normalize(&n);
 
@@ -618,17 +618,17 @@ fn main() {
                 let v2 = world_position + r * size - u * size;
                 let v3 = world_position - r * size - u * size;
 
-                vec.push(Vertex { a_Pos: [ v0.x, v0.y, v0.z , 1.0 ], a_Uv: [0.0, 1.0], a_Color: 0xFFFFFFFF });
-                vec.push(Vertex { a_Pos: [ v1.x, v1.y, v1.z , 1.0 ], a_Uv: [1.0, 1.0], a_Color: 0xFFFFFFFF });
-                vec.push(Vertex { a_Pos: [ v2.x, v2.y, v2.z , 1.0 ], a_Uv: [1.0, 0.0], a_Color: 0xFFFFFFFF });
+                vec.push(Vertex { a_Pos: [ v0.x, v0.y, v0.z , 1.0 ], a_Uv: [0.0, 1.0], a_Color: color });
+                vec.push(Vertex { a_Pos: [ v1.x, v1.y, v1.z , 1.0 ], a_Uv: [1.0, 1.0], a_Color: color });
+                vec.push(Vertex { a_Pos: [ v2.x, v2.y, v2.z , 1.0 ], a_Uv: [1.0, 0.0], a_Color: color });
 
-                vec.push(Vertex { a_Pos: [ v0.x, v0.y, v0.z , 1.0 ], a_Uv: [0.0, 1.0], a_Color: 0xFFFFFFFF });
-                vec.push(Vertex { a_Pos: [ v2.x, v2.y, v2.z , 1.0 ], a_Uv: [1.0, 0.0], a_Color: 0xFFFFFFFF });
-                vec.push(Vertex { a_Pos: [ v3.x, v3.y, v3.z , 1.0 ], a_Uv: [0.0, 0.0], a_Color: 0xFFFFFFFF });
+                vec.push(Vertex { a_Pos: [ v0.x, v0.y, v0.z , 1.0 ], a_Uv: [0.0, 1.0], a_Color: color });
+                vec.push(Vertex { a_Pos: [ v2.x, v2.y, v2.z , 1.0 ], a_Uv: [1.0, 0.0], a_Color: color });
+                vec.push(Vertex { a_Pos: [ v3.x, v3.y, v3.z , 1.0 ], a_Uv: [0.0, 0.0], a_Color: color });
             }
 
             for p in &world.particles_list {
-                add_particle(&mut vertices_list, p.position, p.size, world.camera_position, world.camera_up);
+                add_particle(&mut vertices_list, p.position, p.size, p.color, world.camera_position, world.camera_up);
             }
 
             unsafe {

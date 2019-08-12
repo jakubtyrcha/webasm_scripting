@@ -52,9 +52,9 @@ fn set_camera(ctx: &mut Ctx, x0 : f32, y0: f32, z0: f32, x1 : f32, y1: f32, z1: 
     world.set_camera(vec3(x0, y0, z0), vec3(x1, y1, z1));
 }
 
-fn add_particle(ctx: &mut Ctx, x0 : f32, y0: f32, z0: f32, size : f32) {
+fn add_particle(ctx: &mut Ctx, x0 : f32, y0: f32, z0: f32, size : f32, color : u32) {
     let world: &mut WorldState = unsafe { &mut *(ctx.data as *mut WorldState) };
-    world.add_particle(Particle{ position : vec3(x0, y0, z0), size : size });
+    world.add_particle(Particle{ position : vec3(x0, y0, z0), size : size, color : color });
 }
 
 fn sinf(ctx: &mut Ctx, x : f32) -> f32 {

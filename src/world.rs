@@ -5,7 +5,8 @@ use crate::vm::VMInstance;
 pub struct Particle
 {
     pub position : Vec3,
-    pub size : f32
+    pub size : f32,
+    pub color : u32
 }
 
 pub struct WorldState
