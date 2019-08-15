@@ -26,7 +26,6 @@ Windows
 
 ```
 cargo run --features=dx12
-cargo run --features=dx11
 cargo run --features=vulkan
 ```
 
